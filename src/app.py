@@ -237,11 +237,11 @@ class Handler(FileSystemEventHandler):
         self.stats = stats
         self.history = history
 
-    def on_created(self, event):
-        if event.is_directory:
+    def _process_file(self, src: str):
+        """공통 파일 처리 로직"""
+        if not os.path.exists(src):
             return
 
-        src = event.src_path
         name = os.path.basename(src)
         _, ext = os.path.splitext(name)
         ext_l = ext.lower()
@@ -326,6 +326,22 @@ class Handler(FileSystemEventHandler):
         except Exception as ex:
             log_line(self.cfg, f"FAIL move: {src} ({ex})")
 
+    def on_created(self, event):
+        if event.is_directory:
+            return
+        self._process_file(event.src_path)
+
+    def on_modified(self, event):
+        if event.is_directory:
+            return
+        self._process_file(event.src_path)
+
+    def on_moved(self, event):
+        if event.is_directory:
+            return
+        # 파일이 이동되어 들어온 경우 (dest_path가 감시 폴더 내)
+        self._process_file(event.dest_path)
+
 
 def main():
     cfg = load_config()
@@ -360,8 +376,8 @@ def main():
         while True:
             time.sleep(5)
 
-            # 30초마다 통계 출력
-            if stats and time.time() - last_stats_print > 30:
+            # 1시간마다 통계 출력
+            if stats and time.time() - last_stats_print > 3600:
                 print(stats.get_today_summary())
                 last_stats_print = time.time()
 
