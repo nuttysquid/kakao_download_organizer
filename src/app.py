@@ -343,7 +343,133 @@ class Handler(FileSystemEventHandler):
         self._process_file(event.dest_path)
 
 
+# -----------------------------
+# 자동 실행 & 바로가기 관리
+# -----------------------------
+def get_exe_path() -> str:
+    """현재 실행 파일의 절대 경로를 반환"""
+    import sys
+    if getattr(sys, 'frozen', False):
+        # PyInstaller로 빌드된 EXE
+        return sys.executable
+    else:
+        # Python 스크립트로 실행 중
+        return os.path.abspath(__file__)
+
+
+def enable_autorun() -> bool:
+    """Windows 시작 시 자동 실행 활성화"""
+    try:
+        import winreg
+        exe_path = get_exe_path()
+        key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE) as key:
+            winreg.SetValueEx(key, "KakaoDownloadOrganizer", 0, winreg.REG_SZ, exe_path)
+
+        print("✅ 자동 실행이 활성화되었습니다!")
+        print(f"   경로: {exe_path}")
+        return True
+    except Exception as e:
+        print(f"❌ 자동 실행 활성화 실패: {e}")
+        return False
+
+
+def disable_autorun() -> bool:
+    """Windows 시작 시 자동 실행 비활성화"""
+    try:
+        import winreg
+        key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE) as key:
+            try:
+                winreg.DeleteValue(key, "KakaoDownloadOrganizer")
+                print("✅ 자동 실행이 비활성화되었습니다!")
+                return True
+            except FileNotFoundError:
+                print("ℹ️  자동 실행이 설정되어 있지 않습니다.")
+                return True
+    except Exception as e:
+        print(f"❌ 자동 실행 비활성화 실패: {e}")
+        return False
+
+
+def is_autorun_enabled() -> bool:
+    """자동 실행 상태 확인"""
+    try:
+        import winreg
+        key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_READ) as key:
+            try:
+                value, _ = winreg.QueryValueEx(key, "KakaoDownloadOrganizer")
+                return True
+            except FileNotFoundError:
+                return False
+    except Exception:
+        return False
+
+
+def create_desktop_shortcut() -> bool:
+    """바탕화면에 바로가기 생성"""
+    try:
+        import win32com.client
+        shell = win32com.client.Dispatch("WScript.Shell")
+
+        desktop = shell.SpecialFolders("Desktop")
+        shortcut_path = os.path.join(desktop, "Kakao Download Organizer.lnk")
+
+        shortcut = shell.CreateShortCut(shortcut_path)
+        shortcut.Targetpath = get_exe_path()
+        shortcut.WorkingDirectory = os.path.dirname(get_exe_path())
+        shortcut.IconLocation = get_exe_path()
+        shortcut.Description = "카카오톡 다운로드 파일 자동 정리"
+        shortcut.save()
+
+        print("✅ 바탕화면에 바로가기가 생성되었습니다!")
+        print(f"   위치: {shortcut_path}")
+        return True
+    except ImportError:
+        print("❌ pywin32가 설치되지 않았습니다.")
+        print("   설치: pip install pywin32")
+        return False
+    except Exception as e:
+        print(f"❌ 바로가기 생성 실패: {e}")
+        return False
+
+
 def main():
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Kakao Download Organizer")
+    parser.add_argument("--autorun-enable", action="store_true", help="Windows 시작 시 자동 실행 활성화")
+    parser.add_argument("--autorun-disable", action="store_true", help="Windows 시작 시 자동 실행 비활성화")
+    parser.add_argument("--autorun-status", action="store_true", help="자동 실행 상태 확인")
+    parser.add_argument("--create-shortcut", action="store_true", help="바탕화면 바로가기 생성")
+
+    args = parser.parse_args()
+
+    # 자동 실행 관련 명령어 처리
+    if args.autorun_enable:
+        enable_autorun()
+        return
+
+    if args.autorun_disable:
+        disable_autorun()
+        return
+
+    if args.autorun_status:
+        if is_autorun_enabled():
+            print("✅ 자동 실행이 활성화되어 있습니다.")
+        else:
+            print("❌ 자동 실행이 비활성화되어 있습니다.")
+        return
+
+    if args.create_shortcut:
+        create_desktop_shortcut()
+        return
+
+    # 일반 실행
     cfg = load_config()
     ensure_dirs(cfg)
 

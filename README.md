@@ -8,13 +8,18 @@ PC 카카오톡에서 다운로드/저장되는 파일을 **채팅방별 + 파�
 ### 다운로드(아래 두가지 방법 중에 선택하여 다운로드. 초보자는 1번 추천)
 ### ✅ 1.Python/AutoHotkey 설치 없이 쓰기(Windows EXE)
 1) 이 저장소의 **Releases**로 이동
-2) 최신 버전에서 **`KakaoDownloadOrganizer_v0.2.0_windows.zip`** 다운로드
+2) 최신 버전에서 **`KakaoDownloadOrganizer_v0.3.0_windows.zip`** 다운로드
 3) 압축 해제 후 `KakaoDownloadOrganizer.exe` 실행
 4) 카톡 채팅방 클릭 → **F8** → 파일 저장/다운로드
 
-**✨ v0.2.0 신기능:**
+**✨ v0.3.0 신기능:**
+- 🚀 **Windows 시작 시 자동 실행** (명령줄 인자로 쉽게 설정)
+- 🔗 **바탕화면 바로가기 생성**
+
+**v0.2.x 기능:**
 - 핫키 커스터마이징 (F1~F12)
 - 실시간 통계 표시
+- 파일 이동 히스토리 (30일)
 - 채팅방/확장자 제외 기능
 - 중복 파일 처리 옵션
 
@@ -49,16 +54,43 @@ PC 카카오톡에서 다운로드/저장되는 파일을 **채팅방별 + 파�
 정리 폴더(기본):
 - `문서\KakaoSorted\<채팅방>\<종류>\...`
 
-## 자동 실행(선택: Windows 시작 시 자동 실행)
+## 편의 기능 (v0.3.0+)
 
-항상 자동 정리를 쓰고 싶다면, Windows 시작 시 자동 실행되게 설정할 수 있습니다.
+### 🚀 Windows 시작 시 자동 실행
+
+**EXE 버전 (간편):**
+```powershell
+# 자동 실행 활성화
+KakaoDownloadOrganizer.exe --autorun-enable
+
+# 자동 실행 비활성화
+KakaoDownloadOrganizer.exe --autorun-disable
+
+# 상태 확인
+KakaoDownloadOrganizer.exe --autorun-status
+```
+
+**소스 버전:**
+```powershell
+python src/app.py --autorun-enable
+```
+
+### 🔗 바탕화면 바로가기 만들기
+
+```powershell
+# EXE 버전
+KakaoDownloadOrganizer.exe --create-shortcut
+
+# 소스 버전 (pywin32 필요)
+pip install pywin32
+python src/app.py --create-shortcut
+```
+
+### 수동 설정 (구버전 호환)
 
 1. `Win + R` → `shell:startup` 입력 → Enter
-2. 열리는 “시작프로그램” 폴더에 `scripts\start.bat` **바로가기**를 넣기
-3. (추천) 바로가기 우클릭 → 속성 → **실행: 최소화된 창** 으로 변경
-
-이 설정을 하면 PC를 켤 때 자동으로 실행됩니다.
-(현재 버전은 콘솔(검은 창)이 최소화 상태로 실행됩니다.)
+2. 열리는 "시작프로그램" 폴더에 `KakaoDownloadOrganizer.exe` 바로가기 넣기
+3. (추천) 바로가기 우클릭 → 속성 → **실행: 최소화된 창**
 
 ## 설정(선택)
 
