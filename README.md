@@ -5,8 +5,8 @@ PC 카카오톡에서 다운로드/저장되는 파일을 **채팅방별 + 파�
 - 기본 다운로드 폴더를 자동으로 찾습니다(OneDrive 문서 포함).
 - 사용 방법: **채팅방 클릭 → F8 → 파일 저장/다운로드**
 
-### 다운로드(초보자 추천)
-### ✅ Python/AutoHotkey 설치 없이 쓰기(Windows EXE)
+### 다운로드(아래 두가지 방법 중에 선택하여 다운로드. 초보자는 1번 추천)
+### ✅ 1.Python/AutoHotkey 설치 없이 쓰기(Windows EXE)
 1) 이 저장소의 **Releases**로 이동
 2) 최신 버전에서 **`KakaoDownloadOrganizer_v0.1.1_windows.zip`** 다운로드
 3) 압축 해제 후 `KakaoDownloadOrganizer.exe` 실행  
@@ -16,7 +16,7 @@ PC 카카오톡에서 다운로드/저장되는 파일을 **채팅방별 + 파�
 
 
 
-### ✅개발/커스터마이징(소스 버전: Python + AutoHotkey)
+### ✅2.개발/커스터마이징(소스 버전: Python + AutoHotkey)
 아래 “설치/실행” 안내(README 본문)를 따라 설치해서 사용하세요.
 
 ### 1) 준비물
