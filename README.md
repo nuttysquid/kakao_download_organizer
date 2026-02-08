@@ -8,7 +8,7 @@ PC 카카오톡에서 다운로드/저장되는 파일을 **채팅방별 + 파�
 ### 다운로드(아래 두가지 방법 중에 선택하여 다운로드. 초보자는 1번 추천)
 ### ✅ 1.Python/AutoHotkey 설치 없이 쓰기(Windows EXE)
 1) 이 저장소의 **Releases**로 이동
-2) 최신 버전에서 **`KakaoDownloadOrganizer_v0.1.1_windows.zip`** 다운로드
+2) 최신 버전에서 **`KakaoDownloadOrganizer_v0.1.2_windows.zip`** 다운로드
 3) 압축 해제 후 `KakaoDownloadOrganizer.exe` 실행  
 4) 카톡 채팅방 클릭 → **F8** → 파일 저장/다운로드
 
