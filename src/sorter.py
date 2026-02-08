@@ -1,4 +1,5 @@
 import json
+import sys
 import os
 import ctypes
 from ctypes import wintypes
@@ -103,13 +104,58 @@ def autodetect_output_dir() -> str:
 
 
 def load_config() -> Config:
-    # repo 기준 상대경로로 config.json을 읽습니다.
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    cfg_path = os.path.join(base_dir, "config", "config.json")
+    """
+    - 개발(소스) 실행: repo/config/config.json 사용
+    - EXE(배포) 실행: exe 옆의 config/config.json 또는 exe 옆 config.json 사용
+    - 설정 파일이 없으면: 기본값(AUTO)으로 동작
+    """
+    # 1) 설정 파일 후보 경로들(우선순위)
+    candidates: list[str] = []
 
-    with open(cfg_path, "r", encoding="utf-8") as f:
-        raw = json.load(f)
+    # EXE로 실행 중이면(= PyInstaller frozen)
+    if getattr(sys, "frozen", False):
+        exe_dir = os.path.dirname(sys.executable)
+        candidates += [
+            os.path.join(exe_dir, "config", "config.json"),
+            os.path.join(exe_dir, "config.json"),
+        ]
 
+    # 소스 실행일 때(또는 fallback)
+    repo_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    candidates += [
+        os.path.join(repo_dir, "config", "config.json"),
+    ]
+
+    # 2) 기본 설정(설정 파일이 없을 때 사용)
+    default_raw = {
+        "download_dir": "AUTO",
+        "output_dir": "AUTO",
+        "hotkey_context_ttl_seconds": 180,
+        "context_file": r"%TEMP%\kakao_room_ctx.txt",
+        "rename_template": "{ts}__{room}__{bucket}__{orig}",
+        "buckets": {
+            "이미지": [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".heic"],
+            "문서": [".pdf", ".doc", ".docx", ".ppt", ".pptx", ".xls", ".xlsx", ".hwp", ".hwpx", ".txt", ".rtf", ".csv"],
+            "압축": [".zip", ".7z", ".rar"],
+            "오디오": [".mp3", ".wav", ".m4a", ".aac", ".flac"],
+            "비디오": [".mp4", ".mov", ".mkv", ".avi", ".webm"],
+        },
+        "ignore_ext": [".crdownload", ".tmp", ".part"],
+        "log_dir": "logs",
+    }
+
+    # 3) 실제 설정 로드(있으면 읽고, 없으면 기본값)
+    raw = None
+    for p in candidates:
+        if os.path.exists(p):
+            with open(p, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+            break
+
+    if raw is None:
+        raw = default_raw
+
+    # 4) download/output 처리 (AUTO면 자동탐지, 아니면 환경변수 확장)
     download_raw = str(raw.get("download_dir", "AUTO")).strip()
     output_raw = str(raw.get("output_dir", "AUTO")).strip()
 
@@ -124,6 +170,11 @@ def load_config() -> Config:
         else os.path.expandvars(output_raw)
     )
 
+    # 5) log_dir 처리 (EXE일 때는 exe 옆에 두는 게 덜 헷갈림)
+    log_dir = os.path.expandvars(str(raw.get("log_dir", "logs")).strip())
+    if getattr(sys, "frozen", False) and not os.path.isabs(log_dir):
+        log_dir = os.path.join(os.path.dirname(sys.executable), log_dir)
+
     return Config(
         download_dir=download_dir,
         output_dir=output_dir,
@@ -132,7 +183,7 @@ def load_config() -> Config:
         rename_template=raw.get("rename_template", "{ts}__{room}__{bucket}__{orig}"),
         buckets=raw.get("buckets", {}),
         ignore_ext=[e.lower() for e in raw.get("ignore_ext", [])],
-        log_dir=raw.get("log_dir", "logs"),
+        log_dir=log_dir,
     )
 
 

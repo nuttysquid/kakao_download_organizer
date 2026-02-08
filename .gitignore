@@ -15,3 +15,8 @@ config/config.json
 # OS
 Thumbs.db
 .DS_Store
+# Release artifacts (do not commit)
+release_exe/
+dist/
+build/
+*.zip
