@@ -20,3 +20,8 @@ release_exe/
 dist/
 build/
 *.zip
+*.exe
+
+# Claude Code settings (do not commit)
+.claude/
+.claude*

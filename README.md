@@ -8,9 +8,15 @@ PC 카카오톡에서 다운로드/저장되는 파일을 **채팅방별 + 파�
 ### 다운로드(아래 두가지 방법 중에 선택하여 다운로드. 초보자는 1번 추천)
 ### ✅ 1.Python/AutoHotkey 설치 없이 쓰기(Windows EXE)
 1) 이 저장소의 **Releases**로 이동
-2) 최신 버전에서 **`KakaoDownloadOrganizer_v0.1.2_windows.zip`** 다운로드
-3) 압축 해제 후 `KakaoDownloadOrganizer.exe` 실행  
+2) 최신 버전에서 **`KakaoDownloadOrganizer_v0.2.0_windows.zip`** 다운로드
+3) 압축 해제 후 `KakaoDownloadOrganizer.exe` 실행
 4) 카톡 채팅방 클릭 → **F8** → 파일 저장/다운로드
+
+**✨ v0.2.0 신기능:**
+- 핫키 커스터마이징 (F1~F12)
+- 실시간 통계 표시
+- 채팅방/확장자 제외 기능
+- 중복 파일 처리 옵션
 
 ※ EXE 전용 안내서는 `README_EXE.md`를 참고하세요.
 
@@ -56,8 +62,38 @@ PC 카카오톡에서 다운로드/저장되는 파일을 **채팅방별 + 파�
 
 ## 설정(선택)
 
-- `config/config.json`에서 `"download_dir"`/`"output_dir"`를 직접 지정할 수 있습니다.
+- `config/config.json`에서 다양한 설정을 변경할 수 있습니다.
 - 기본값은 `"AUTO"`이며, OneDrive 환경도 자동 대응합니다.
+
+### 주요 설정 옵션
+
+```json
+{
+  "download_dir": "AUTO",
+  "output_dir": "AUTO",
+
+  "hotkey": "F8",
+
+  "exclude_rooms": ["광고방", "스팸방"],
+  "exclude_extensions": [".exe", ".msi", ".bat"],
+
+  "duplicate_handling": "rename",
+
+  "enable_statistics": true,
+  "enable_history": true
+}
+```
+
+**설정 설명:**
+- `hotkey`: 채팅방 캡처 단축키 (F1~F12)
+- `exclude_rooms`: 정리하지 않을 채팅방 이름
+- `exclude_extensions`: 정리하지 않을 파일 확장자
+- `duplicate_handling`: 중복 파일 처리 방법
+  - `"rename"`: 파일명에 (1), (2) 추가 (기본값)
+  - `"skip"`: 건너뛰기
+  - `"overwrite"`: 덮어쓰기
+- `enable_statistics`: 통계 기능 켜기/끄기
+- `enable_history`: 히스토리 기능 켜기/끄기
 
 ## 주의
 

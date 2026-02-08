@@ -1,6 +1,7 @@
 import os
 import time
 import threading
+import queue
 import ctypes
 from ctypes import wintypes
 
@@ -15,18 +16,44 @@ from sorter import (
     safe_name,
     bucket_for_ext,
     wait_until_ready,
+    Statistics,
+    History,
 )
 
 
 # -----------------------------
-# Windows: 글로벌 핫키(F8) 등록
+# Windows: 글로벌 핫키 등록
 # -----------------------------
 user32 = ctypes.windll.user32
 
 WM_HOTKEY = 0x0312
 HOTKEY_ID = 1
-VK_F8 = 0x77  # F8
 MOD_NOMOD = 0x0000
+
+# 핫키 매핑 (Function Keys)
+HOTKEY_VK_MAP = {
+    "F1": 0x70,
+    "F2": 0x71,
+    "F3": 0x72,
+    "F4": 0x73,
+    "F5": 0x74,
+    "F6": 0x75,
+    "F7": 0x76,
+    "F8": 0x77,
+    "F9": 0x78,
+    "F10": 0x79,
+    "F11": 0x7A,
+    "F12": 0x7B,
+}
+
+def get_hotkey_vk(hotkey_name: str) -> int:
+    """핫키 이름을 Virtual Key 코드로 변환"""
+    key = hotkey_name.upper()
+    if key in HOTKEY_VK_MAP:
+        return HOTKEY_VK_MAP[key]
+    # 기본값은 F8
+    print(f"Warning: Unknown hotkey '{hotkey_name}', using F8")
+    return HOTKEY_VK_MAP["F8"]
 
 
 def get_foreground_window_title() -> str:
@@ -39,6 +66,79 @@ def get_foreground_window_title() -> str:
     buf = ctypes.create_unicode_buffer(length + 1)
     user32.GetWindowTextW(hwnd, buf, length + 1)
     return buf.value or ""
+
+# -----------------------------
+# 작은 팝업(툴팁처럼) 표시용
+# -----------------------------
+_popup_q: "queue.Queue[tuple[str, int, int, int]]" = queue.Queue()
+
+class RECT(ctypes.Structure):
+    _fields_ = [
+        ("left", wintypes.LONG),
+        ("top", wintypes.LONG),
+        ("right", wintypes.LONG),
+        ("bottom", wintypes.LONG),
+    ]
+
+def get_foreground_hwnd() -> int:
+    return int(user32.GetForegroundWindow())
+
+def get_window_rect(hwnd: int) -> tuple[int, int, int, int] | None:
+    if not hwnd:
+        return None
+    rect = RECT()
+    ok = user32.GetWindowRect(wintypes.HWND(hwnd), ctypes.byref(rect))
+    if not ok:
+        return None
+    return int(rect.left), int(rect.top), int(rect.right), int(rect.bottom)
+
+def popup_worker():
+    # tkinter는 표준 포함이라 별도 설치 없이 사용 가능
+    import tkinter as tk
+
+    root = tk.Tk()
+    root.withdraw()
+
+    def poll():
+        try:
+            while True:
+                text, x, y, ms = _popup_q.get_nowait()
+                win = tk.Toplevel(root)
+                win.overrideredirect(True)
+                win.attributes("-topmost", True)
+
+                # 심플한 작은 박스
+                label = tk.Label(win, text=text, bg="black", fg="white", padx=10, pady=5)
+                label.pack()
+
+                win.update_idletasks()
+                w = win.winfo_width()
+                h = win.winfo_height()
+
+                # 화면 밖으로 나가지 않게 약간 보정
+                px = max(0, x - (w // 2))
+                py = max(0, y)
+                win.geometry(f"{w}x{h}+{px}+{py}")
+
+                win.after(ms, win.destroy)
+        except queue.Empty:
+            pass
+
+        root.after(80, poll)
+
+    poll()
+    root.mainloop()
+
+def show_capture_popup(room: str):
+    # 카톡 창 상단 근처에 0.9초 정도 팝업 표시
+    hwnd = get_foreground_hwnd()
+    r = get_window_rect(hwnd)
+    if not r:
+        return
+    left, top, right, _ = r
+    x = (left + right) // 2
+    y = top + 12
+    _popup_q.put((f"캡처됨: {room}", x, y, 900))
 
 
 def extract_room_from_title(title: str) -> str:
@@ -89,20 +189,22 @@ class Context:
         return "미분류", time.strftime("%Y%m%d%H%M%S")
 
 
-def hotkey_thread_fn(ctx: Context, stop_event: threading.Event):
+def hotkey_thread_fn(ctx: Context, stop_event: threading.Event, hotkey_name: str = "F8"):
     """
-    F8 글로벌 핫키를 등록하고 메시지 루프를 돌립니다.
+    글로벌 핫키를 등록하고 메시지 루프를 돌립니다.
     """
+    vk_code = get_hotkey_vk(hotkey_name)
+
     # 기존 등록이 남아있을 수 있으니 해제 시도
     try:
         user32.UnregisterHotKey(None, HOTKEY_ID)
     except Exception:
         pass
 
-    if not user32.RegisterHotKey(None, HOTKEY_ID, MOD_NOMOD, VK_F8):
+    if not user32.RegisterHotKey(None, HOTKEY_ID, MOD_NOMOD, vk_code):
         # 등록 실패 (다른 프로그램이 점유했거나 권한/환경 문제)
-        print("ERROR: F8 핫키 등록 실패. 다른 프로그램에서 F8을 사용 중일 수 있어요.")
-        print("      (추후 설정으로 핫키 변경 기능을 추가할 수 있습니다.)")
+        print(f"ERROR: {hotkey_name} 핫키 등록 실패. 다른 프로그램에서 {hotkey_name}을 사용 중일 수 있어요.")
+        print("      (config.json에서 다른 핫키로 변경할 수 있습니다: F1~F12)")
         return
 
     msg = wintypes.MSG()
@@ -118,6 +220,8 @@ def hotkey_thread_fn(ctx: Context, stop_event: threading.Event):
             ctx.set(room)
             # 사용자 피드백(콘솔)
             print(f"[F8] room captured: {room}")
+            show_capture_popup(room)
+
 
     user32.UnregisterHotKey(None, HOTKEY_ID)
 
@@ -126,10 +230,12 @@ def hotkey_thread_fn(ctx: Context, stop_event: threading.Event):
 # 다운로드 폴더 감시 & 정리
 # -----------------------------
 class Handler(FileSystemEventHandler):
-    def __init__(self, cfg, ctx: Context):
+    def __init__(self, cfg, ctx: Context, stats=None, history=None):
         super().__init__()
         self.cfg = cfg
         self.ctx = ctx
+        self.stats = stats
+        self.history = history
 
     def on_created(self, event):
         if event.is_directory:
@@ -140,7 +246,13 @@ class Handler(FileSystemEventHandler):
         _, ext = os.path.splitext(name)
         ext_l = ext.lower()
 
+        # 무시할 확장자 체크
         if ext_l in self.cfg.ignore_ext:
+            return
+
+        # 제외할 확장자 체크
+        if ext_l in self.cfg.exclude_extensions:
+            log_line(self.cfg, f"SKIP excluded extension: {src}")
             return
 
         if not wait_until_ready(src):
@@ -153,6 +265,12 @@ class Handler(FileSystemEventHandler):
         ts = ts[:12]
 
         room = safe_name(room)
+
+        # 제외할 채팅방 체크
+        if room in self.cfg.exclude_rooms:
+            log_line(self.cfg, f"SKIP excluded room: {room}")
+            return
+
         bucket = bucket_for_ext(self.cfg, ext_l)
         orig_safe = safe_name(name)
 
@@ -166,16 +284,45 @@ class Handler(FileSystemEventHandler):
 
         dst = os.path.join(dst_dir, new_name)
 
-        base, e2 = os.path.splitext(dst)
-        i = 1
-        while os.path.exists(dst):
-            dst = f"{base}({i}){e2}"
-            i += 1
+        # 중복 파일 처리
+        if os.path.exists(dst):
+            if self.cfg.duplicate_handling == "skip":
+                log_line(self.cfg, f"SKIP duplicate: {dst}")
+                return
+            elif self.cfg.duplicate_handling == "overwrite":
+                try:
+                    os.remove(dst)
+                    log_line(self.cfg, f"OVERWRITE: {dst}")
+                except Exception as e:
+                    log_line(self.cfg, f"FAIL overwrite: {dst} ({e})")
+                    return
+            else:  # rename (기본값)
+                base, e2 = os.path.splitext(dst)
+                i = 1
+                while os.path.exists(dst):
+                    dst = f"{base}({i}){e2}"
+                    i += 1
 
         try:
+            # 파일 크기 얻기 (통계용)
+            file_size = 0
+            try:
+                file_size = os.path.getsize(src)
+            except Exception:
+                pass
+
             import shutil
             shutil.move(src, dst)
             log_line(self.cfg, f"MOVED {src} -> {dst}")
+
+            # 통계 기록
+            if self.stats:
+                self.stats.record_file(room, bucket, file_size)
+
+            # 히스토리 기록
+            if self.history:
+                self.history.record_move(src, dst, room, bucket)
+
         except Exception as ex:
             log_line(self.cfg, f"FAIL move: {src} ({ex})")
 
@@ -187,29 +334,47 @@ def main():
     print("=== Kakao Download Organizer (single app) ===")
     print("download_dir:", cfg.download_dir)
     print("output_dir  :", cfg.output_dir)
-    print("Tip: 카톡창 클릭 -> F8 -> 파일 저장/다운로드")
+    print(f"hotkey      : {cfg.hotkey}")
+    print(f"Tip: 카톡창 클릭 -> {cfg.hotkey} -> 파일 저장/다운로드")
 
     ctx = Context()
     stop_event = threading.Event()
 
+    # 통계 및 히스토리 초기화
+    stats = Statistics(cfg) if cfg.enable_statistics else None
+    history = History(cfg) if cfg.enable_history else None
+
     # 핫키 스레드 시작
-    t = threading.Thread(target=hotkey_thread_fn, args=(ctx, stop_event), daemon=True)
+    threading.Thread(target=popup_worker, daemon=True).start()
+    t = threading.Thread(target=hotkey_thread_fn, args=(ctx, stop_event, cfg.hotkey), daemon=True)
     t.start()
 
     # watchdog 시작
     obs = Observer()
-    obs.schedule(Handler(cfg, ctx), cfg.download_dir, recursive=False)
+    obs.schedule(Handler(cfg, ctx, stats, history), cfg.download_dir, recursive=False)
     obs.start()
 
     try:
+        # 주기적으로 통계 출력
+        last_stats_print = time.time()
         while True:
-            time.sleep(1)
+            time.sleep(5)
+
+            # 30초마다 통계 출력
+            if stats and time.time() - last_stats_print > 30:
+                print(stats.get_today_summary())
+                last_stats_print = time.time()
+
     except KeyboardInterrupt:
         pass
     finally:
         stop_event.set()
         obs.stop()
         obs.join()
+
+        # 종료 시 최종 통계 출력
+        if stats:
+            print(stats.get_today_summary())
 
 
 if __name__ == "__main__":

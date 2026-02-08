@@ -1,10 +1,17 @@
 {
-  "download_dir": "%USERPROFILE%\\Documents\\카카오톡 받은 파일",
-
-  "output_dir": "D:\\KakaoSorted",
+  "download_dir": "AUTO",
+  "output_dir": "AUTO",
   "hotkey_context_ttl_seconds": 180,
   "context_file": "%TEMP%\\kakao_room_ctx.txt",
   "rename_template": "{ts}__{room}__{bucket}__{orig}",
+
+  "hotkey": "F8",
+
+  "exclude_rooms": [],
+  "exclude_extensions": [".exe", ".msi", ".bat"],
+
+  "duplicate_handling": "rename",
+
   "buckets": {
     "이미지": [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".heic"],
     "문서": [".pdf", ".doc", ".docx", ".ppt", ".pptx", ".xls", ".xlsx", ".hwp", ".hwpx", ".txt", ".rtf", ".csv"],
@@ -12,4 +19,9 @@
     "오디오": [".mp3", ".wav", ".m4a", ".aac", ".flac"],
     "비디오": [".mp4", ".mov", ".mkv", ".avi", ".webm"]
   },
-  "ignore_ext": [".crdownlo]()_
+
+  "ignore_ext": [".crdownload", ".tmp", ".part"],
+  "log_dir": "logs",
+  "enable_statistics": true,
+  "enable_history": true
+}

@@ -31,6 +31,19 @@ class Config:
     buckets: Dict[str, List[str]]
     ignore_ext: List[str]
     log_dir: str
+    # 새로운 설정들
+    hotkey: str = "F8"
+    exclude_rooms: List[str] = None
+    exclude_extensions: List[str] = None
+    duplicate_handling: str = "rename"  # rename, skip, overwrite
+    enable_statistics: bool = True
+    enable_history: bool = True
+
+    def __post_init__(self):
+        if self.exclude_rooms is None:
+            self.exclude_rooms = []
+        if self.exclude_extensions is None:
+            self.exclude_extensions = []
 
 class GUID(ctypes.Structure):
     _fields_ = [
@@ -184,6 +197,13 @@ def load_config() -> Config:
         buckets=raw.get("buckets", {}),
         ignore_ext=[e.lower() for e in raw.get("ignore_ext", [])],
         log_dir=log_dir,
+        # 새로운 설정들
+        hotkey=str(raw.get("hotkey", "F8")).upper(),
+        exclude_rooms=raw.get("exclude_rooms", []),
+        exclude_extensions=[e.lower() for e in raw.get("exclude_extensions", [])],
+        duplicate_handling=raw.get("duplicate_handling", "rename"),
+        enable_statistics=bool(raw.get("enable_statistics", True)),
+        enable_history=bool(raw.get("enable_history", True)),
     )
 
 
@@ -199,6 +219,133 @@ def log_line(cfg: Config, msg: str) -> None:
     line = f"[{time.strftime('%H:%M:%S')}] {msg}\n"
     with open(path, "a", encoding="utf-8") as f:
         f.write(line)
+
+
+# 통계 추적 클래스
+class Statistics:
+    def __init__(self, cfg: Config):
+        self.cfg = cfg
+        self.stats_file = os.path.join(cfg.log_dir, "statistics.json")
+        self.today = time.strftime("%Y-%m-%d")
+        self.stats = self._load_stats()
+
+    def _load_stats(self) -> dict:
+        if os.path.exists(self.stats_file):
+            try:
+                with open(self.stats_file, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception:
+                pass
+        return {}
+
+    def _save_stats(self):
+        try:
+            with open(self.stats_file, "w", encoding="utf-8") as f:
+                json.dump(self.stats, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            log_line(self.cfg, f"Failed to save stats: {e}")
+
+    def record_file(self, room: str, bucket: str, file_size: int):
+        if not self.cfg.enable_statistics:
+            return
+
+        if self.today not in self.stats:
+            self.stats[self.today] = {}
+
+        day_stats = self.stats[self.today]
+
+        # 전체 통계
+        if "total" not in day_stats:
+            day_stats["total"] = {"count": 0, "size": 0}
+        day_stats["total"]["count"] += 1
+        day_stats["total"]["size"] += file_size
+
+        # 버킷별 통계
+        if "by_bucket" not in day_stats:
+            day_stats["by_bucket"] = {}
+        if bucket not in day_stats["by_bucket"]:
+            day_stats["by_bucket"][bucket] = {"count": 0, "size": 0}
+        day_stats["by_bucket"][bucket]["count"] += 1
+        day_stats["by_bucket"][bucket]["size"] += file_size
+
+        # 채팅방별 통계
+        if "by_room" not in day_stats:
+            day_stats["by_room"] = {}
+        if room not in day_stats["by_room"]:
+            day_stats["by_room"][room] = {"count": 0, "size": 0}
+        day_stats["by_room"][room]["count"] += 1
+        day_stats["by_room"][room]["size"] += file_size
+
+        self._save_stats()
+
+    def get_today_summary(self) -> str:
+        if self.today not in self.stats:
+            return "오늘 정리된 파일: 0개"
+
+        day_stats = self.stats[self.today]
+        total = day_stats.get("total", {"count": 0, "size": 0})
+        count = total["count"]
+        size_mb = total["size"] / (1024 * 1024)
+
+        lines = [f"\n📊 오늘 정리된 파일: {count}개 ({size_mb:.1f}MB)"]
+
+        by_bucket = day_stats.get("by_bucket", {})
+        if by_bucket:
+            lines.append("  종류별:")
+            for bucket, data in by_bucket.items():
+                bcount = data["count"]
+                bsize = data["size"] / (1024 * 1024)
+                lines.append(f"    {bucket}: {bcount}개 ({bsize:.1f}MB)")
+
+        return "\n".join(lines)
+
+
+# 히스토리 추적 클래스
+class History:
+    def __init__(self, cfg: Config):
+        self.cfg = cfg
+        self.history_file = os.path.join(cfg.log_dir, "history.json")
+        self.today = time.strftime("%Y-%m-%d")
+        self.history = self._load_history()
+
+    def _load_history(self) -> dict:
+        if os.path.exists(self.history_file):
+            try:
+                with open(self.history_file, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception:
+                pass
+        return {}
+
+    def _save_history(self):
+        try:
+            # 최근 30일만 보관
+            cutoff = time.time() - (30 * 24 * 60 * 60)
+            cutoff_date = time.strftime("%Y-%m-%d", time.localtime(cutoff))
+
+            filtered = {k: v for k, v in self.history.items() if k >= cutoff_date}
+
+            with open(self.history_file, "w", encoding="utf-8") as f:
+                json.dump(filtered, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            log_line(self.cfg, f"Failed to save history: {e}")
+
+    def record_move(self, src: str, dst: str, room: str, bucket: str):
+        if not self.cfg.enable_history:
+            return
+
+        if self.today not in self.history:
+            self.history[self.today] = []
+
+        self.history[self.today].append({
+            "time": time.strftime("%H:%M:%S"),
+            "src": src,
+            "dst": dst,
+            "room": room,
+            "bucket": bucket
+        })
+
+        self._save_history()
 
 
 def get_room_context(cfg: Config) -> Tuple[str, str]:
@@ -251,9 +398,11 @@ def wait_until_ready(path: str, timeout_sec: int = 20) -> bool:
 
 
 class Handler(FileSystemEventHandler):
-    def __init__(self, cfg: Config):
+    def __init__(self, cfg: Config, stats: Statistics = None, history: History = None):
         super().__init__()
         self.cfg = cfg
+        self.stats = stats
+        self.history = history
 
     def on_created(self, event):
         if event.is_directory:
@@ -264,7 +413,13 @@ class Handler(FileSystemEventHandler):
         _, ext = os.path.splitext(name)
         ext_l = ext.lower()
 
+        # 무시할 확장자 체크
         if ext_l in self.cfg.ignore_ext:
+            return
+
+        # 제외할 확장자 체크
+        if ext_l in self.cfg.exclude_extensions:
+            log_line(self.cfg, f"SKIP excluded extension: {src}")
             return
 
         if not wait_until_ready(src):
@@ -275,6 +430,11 @@ class Handler(FileSystemEventHandler):
         ts = ts[:12]  # YYYYMMDDHHMM (초 제거)
 
         room = safe_name(room)
+
+        # 제외할 채팅방 체크
+        if room in self.cfg.exclude_rooms:
+            log_line(self.cfg, f"SKIP excluded room: {room}")
+            return
 
         bucket = bucket_for_ext(self.cfg, ext_l)
         orig_safe = safe_name(name)
@@ -289,15 +449,44 @@ class Handler(FileSystemEventHandler):
 
         dst = os.path.join(dst_dir, new_name)
 
-        base, e2 = os.path.splitext(dst)
-        i = 1
-        while os.path.exists(dst):
-            dst = f"{base}({i}){e2}"
-            i += 1
+        # 중복 파일 처리
+        if os.path.exists(dst):
+            if self.cfg.duplicate_handling == "skip":
+                log_line(self.cfg, f"SKIP duplicate: {dst}")
+                return
+            elif self.cfg.duplicate_handling == "overwrite":
+                try:
+                    os.remove(dst)
+                    log_line(self.cfg, f"OVERWRITE: {dst}")
+                except Exception as e:
+                    log_line(self.cfg, f"FAIL overwrite: {dst} ({e})")
+                    return
+            else:  # rename (기본값)
+                base, e2 = os.path.splitext(dst)
+                i = 1
+                while os.path.exists(dst):
+                    dst = f"{base}({i}){e2}"
+                    i += 1
 
         try:
+            # 파일 크기 얻기 (통계용)
+            file_size = 0
+            try:
+                file_size = os.path.getsize(src)
+            except Exception:
+                pass
+
             shutil.move(src, dst)
             log_line(self.cfg, f"MOVED {src} -> {dst}")
+
+            # 통계 기록
+            if self.stats:
+                self.stats.record_file(room, bucket, file_size)
+
+            # 히스토리 기록
+            if self.history:
+                self.history.record_move(src, dst, room, bucket)
+
         except Exception as ex:
             log_line(self.cfg, f"FAIL move: {src} ({ex})")
 
@@ -310,22 +499,40 @@ def main():
     print("download_dir:", cfg.download_dir)
     print("output_dir  :", cfg.output_dir)
     print("context_file:", cfg.context_file)
+    print(f"hotkey      : {cfg.hotkey}")
     print("Tip: 카톡창 클릭 -> F8 -> 파일 저장/다운로드")
 
     log_line(cfg, "START sorter")
 
+    # 통계 및 히스토리 초기화
+    stats = Statistics(cfg) if cfg.enable_statistics else None
+    history = History(cfg) if cfg.enable_history else None
+
     obs = Observer()
-    obs.schedule(Handler(cfg), cfg.download_dir, recursive=False)
+    obs.schedule(Handler(cfg, stats, history), cfg.download_dir, recursive=False)
     obs.start()
 
     try:
+        # 주기적으로 통계 출력
+        last_stats_print = time.time()
         while True:
-            time.sleep(1)
+            time.sleep(5)
+
+            # 30초마다 통계 출력
+            if stats and time.time() - last_stats_print > 30:
+                print(stats.get_today_summary())
+                last_stats_print = time.time()
+
     except KeyboardInterrupt:
         pass
     finally:
         obs.stop()
         obs.join()
+
+        # 종료 시 최종 통계 출력
+        if stats:
+            print(stats.get_today_summary())
+
         log_line(cfg, "STOP sorter")
 
 
